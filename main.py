@@ -123,18 +123,18 @@ def _train_and_evaluate(
 
     plot_feature_importance(
         sklearn_result.feature_importances,
-        config.plots_dir / f"feature_importance_{run_name}.png",
+        config.plots_dir / f"feature_importance_{run_name}.html",
     )
     plot_confusion_matrix(
         sklearn_result.metrics["random_forest"]["confusion_matrix"],
         sklearn_result.metrics["random_forest"]["labels"],
-        config.plots_dir / f"confusion_matrix_rf_{run_name}.png",
+        config.plots_dir / f"confusion_matrix_rf_{run_name}.html",
         title=f"Random Forest Confusion Matrix ({run_name})",
     )
     plot_confusion_matrix(
         torch_result.metrics["confusion_matrix"],
         torch_result.metrics["labels"],
-        config.plots_dir / f"confusion_matrix_torch_{run_name}.png",
+        config.plots_dir / f"confusion_matrix_torch_{run_name}.html",
         title=f"Torch MLP Confusion Matrix ({run_name})",
     )
 

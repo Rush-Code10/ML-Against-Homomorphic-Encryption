@@ -1,3 +1,11 @@
 2026-04-15 18:57:28 | INFO | main | Starting metadata leakage pipeline
 2026-04-15 18:57:28 | INFO | main | Configuration: {'random_seed': 42, 'samples_per_operation': 100, 'vector_size': 16, 'regression_features': 4, 'defense_noise_scale': 0.08, 'baseline_noise_scale': 0.07, 'workload_jitter_scale': 0.2, 'torch_hidden_dim': 32, 'torch_epochs': 10, 'torch_batch_size': 64, 'torch_learning_rate': 0.001, 'backend_preference': 'mock'}
 2026-04-15 18:57:28 | INFO | main | Initialized FHE backend: mock
+2026-04-15 19:00:13 | INFO | main | Starting metadata leakage pipeline
+2026-04-15 19:00:13 | INFO | main | Configuration: {'random_seed': 42, 'samples_per_operation': 100, 'vector_size': 16, 'regression_features': 4, 'defense_noise_scale': 0.08, 'baseline_noise_scale': 0.07, 'workload_jitter_scale': 0.2, 'torch_hidden_dim': 32, 'torch_epochs': 10, 'torch_batch_size': 64, 'torch_learning_rate': 0.001, 'backend_preference': 'mock'}
+2026-04-15 19:00:13 | INFO | main | Initialized FHE backend: mock
+2026-04-15 19:00:18 | INFO | main | Baseline RF accuracy: 0.9300
+2026-04-15 19:00:18 | INFO | main | Defended RF accuracy: 0.8800
+2026-04-15 19:00:18 | INFO | main | Baseline Torch accuracy: 0.4900
+2026-04-15 19:00:18 | INFO | main | Defended Torch accuracy: 0.5600
+2026-04-15 19:00:18 | INFO | main | Pipeline complete
