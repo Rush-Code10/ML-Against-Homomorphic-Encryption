@@ -1,10 +1,10 @@
 {
   "dummy_baseline": 0.2,
   "dummy_defended": 0.2,
-  "rf_baseline": 0.76,
-  "rf_defended": 0.64,
-  "svm_baseline": 0.84,
-  "svm_defended": 0.68,
-  "torch_baseline": 0.26,
-  "torch_defended": 0.34
+  "rf_baseline": 0.79,
+  "rf_defended": 0.7,
+  "svm_baseline": 0.81,
+  "svm_defended": 0.7,
+  "torch_baseline": 0.76,
+  "torch_defended": 0.57
 }

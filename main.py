@@ -73,7 +73,7 @@ def run_pipeline(overrides: dict[str, object] | None = None) -> PipelineResult:
         "torch_baseline": float(baseline_results["torch"]["accuracy"]),
         "torch_defended": float(defended_results["torch"]["accuracy"]),
     }
-    plot_accuracy_comparison(comparison, config.plots_dir / "accuracy_comparison.png")
+    plot_accuracy_comparison(comparison, config.plots_dir / "accuracy_comparison.html")
     save_json(comparison, config.metrics_dir / "accuracy_comparison.json")
 
     logger.info("Baseline RF accuracy: %.4f", baseline_results["random_forest"]["accuracy"])
@@ -94,13 +94,13 @@ def run_pipeline(overrides: dict[str, object] | None = None) -> PipelineResult:
         },
         accuracy_comparison=comparison,
         plots={
-            "accuracy_comparison": str(config.plots_dir / "accuracy_comparison.png"),
-            "feature_importance_baseline": str(config.plots_dir / "feature_importance_baseline.png"),
-            "feature_importance_defended": str(config.plots_dir / "feature_importance_defended.png"),
-            "confusion_matrix_rf_baseline": str(config.plots_dir / "confusion_matrix_rf_baseline.png"),
-            "confusion_matrix_rf_defended": str(config.plots_dir / "confusion_matrix_rf_defended.png"),
-            "confusion_matrix_torch_baseline": str(config.plots_dir / "confusion_matrix_torch_baseline.png"),
-            "confusion_matrix_torch_defended": str(config.plots_dir / "confusion_matrix_torch_defended.png"),
+            "accuracy_comparison": str(config.plots_dir / "accuracy_comparison.html"),
+            "feature_importance_baseline": str(config.plots_dir / "feature_importance_baseline.html"),
+            "feature_importance_defended": str(config.plots_dir / "feature_importance_defended.html"),
+            "confusion_matrix_rf_baseline": str(config.plots_dir / "confusion_matrix_rf_baseline.html"),
+            "confusion_matrix_rf_defended": str(config.plots_dir / "confusion_matrix_rf_defended.html"),
+            "confusion_matrix_torch_baseline": str(config.plots_dir / "confusion_matrix_torch_baseline.html"),
+            "confusion_matrix_torch_defended": str(config.plots_dir / "confusion_matrix_torch_defended.html"),
         },
     )
 

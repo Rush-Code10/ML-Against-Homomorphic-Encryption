@@ -1,11 +1,23 @@
 const form = document.getElementById("simulation-form");
 const runButton = document.getElementById("run-button");
+const buttonText = document.querySelector(".button-text");
+const buttonLoader = document.querySelector(".button-loader");
+const statusContainer = document.getElementById("run-status-container");
 const statusNode = document.getElementById("run-status");
+const statusTitle = document.getElementById("status-title");
+const statusMessage = document.getElementById("status-message");
 const summaryNode = document.getElementById("result-summary");
 const storyNode = document.getElementById("story-summary");
 const metaNode = document.getElementById("experiment-meta");
 const modelNode = document.getElementById("model-metrics");
 const plotsNode = document.getElementById("plots-grid");
+
+function setStatus(type, title, message) {
+    statusContainer.style.display = 'block';
+    statusNode.className = `run-status status-${type}`;
+    statusTitle.textContent = title;
+    statusMessage.textContent = message;
+}
 
 function percent(value) {
     return `${(Number(value) * 100).toFixed(1)}%`;
@@ -79,7 +91,14 @@ function renderSummary(result) {
         <article class="plot-card">
             <h3>${title}</h3>
             <p>${description}</p>
-            <img src="${src}?v=${Date.now()}" alt="${title}">
+            <div class="plot-container">
+                <iframe
+                    src="${src}?v=${Date.now()}"
+                    frameborder="0"
+                    loading="lazy"
+                    onload="this.closest('.plot-container').classList.add('loaded')"
+                ></iframe>
+            </div>
         </article>
     `).join("");
 }
@@ -93,8 +112,11 @@ async function runSimulation(event) {
     payload.defense_noise_scale = Number(payload.defense_noise_scale);
 
     runButton.disabled = true;
-    statusNode.textContent = "Simulation running. The server is generating encrypted workloads, training models, and writing fresh artifacts.";
-    statusNode.className = "run-status status-warn";
+    buttonText.style.display = 'none';
+    buttonLoader.style.display = 'flex';
+
+    setStatus('loading', 'Simulation Running',
+        'The server is generating encrypted workloads, training models, and writing fresh artifacts. This may take a few minutes...');
 
     try {
         const response = await fetch("/api/run", {
@@ -107,13 +129,15 @@ async function runSimulation(event) {
             throw new Error(data.error || "Simulation failed");
         }
         renderSummary(data.result);
-        statusNode.textContent = "Simulation complete. The dashboard now reflects the latest run.";
-        statusNode.className = "run-status status-good";
+        setStatus('good', 'Simulation Complete',
+            'The dashboard now reflects the latest run. All artifacts have been generated successfully.');
     } catch (error) {
-        statusNode.textContent = `Simulation failed: ${error.message}. Retry with smaller settings first if you are using the TenSEAL backend.`;
-        statusNode.className = "run-status status-error";
+        setStatus('error', 'Simulation Failed',
+            `${error.message}. Try reducing samples or using the mock backend for faster testing.`);
     } finally {
         runButton.disabled = false;
+        buttonText.style.display = 'inline';
+        buttonLoader.style.display = 'none';
     }
 }
 
@@ -121,6 +145,6 @@ form.addEventListener("submit", runSimulation);
 
 if (window.__INITIAL_STATE__) {
     renderSummary(window.__INITIAL_STATE__);
-    statusNode.textContent = "Loaded the most recent saved simulation.";
-    statusNode.className = "run-status status-good";
+    setStatus('good', 'Previous Results Loaded',
+        'Displaying the most recent saved simulation. Run a new simulation to update the results.');
 }
