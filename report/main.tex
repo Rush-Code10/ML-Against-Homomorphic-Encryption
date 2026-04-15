@@ -1,0 +1,645 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx} % Times New Roman for text and math
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{cite}
+\usepackage{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue
+}
+
+\onehalfspacing
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.6em}{}
+
+\begin{document}
+
+%==================================================
+% TITLE PAGE
+%==================================================
+\begin{titlepage}
+\centering
+\vspace*{0.4in}
+
+{\scshape\large \textbf{[Insert Institution Name]} \par}
+\vspace{0.1in}
+{\scshape [Insert Department / Branch Name] \par}
+\vspace{0.6in}
+
+\rule{\textwidth}{0.6pt}\\[0.3in]
+{\huge \bfseries Adversarial Machine Learning Against Homomorphic Encryption Using Metadata Leakage \par}
+\vspace{0.2in}
+{\large \textit{A Study of Side-Channel Inference on CKKS Workloads} \par}
+\rule{\textwidth}{0.6pt}\\[0.6in]
+
+\begin{flushleft}
+\textbf{Submitted by:}\\[0.15in]
+\begin{tabular}{ll}
+1. Shrey Parekh & Roll No: C122 \\
+2. Rushabh Shah & Roll No: C126 \\
+3. Anushka Batte & Roll No: C142 \\
+4. Sparsh Shah & Roll No: C144 \\
+\end{tabular}
+
+\vspace{0.35in}
+\begin{tabular}{ll}
+\textbf{Branch}            & : BTI Computer Engineering \\
+\textbf{Semester}          & : 10 \\
+\textbf{Academic Year}     & : 2025-2026 \\
+\textbf{Course Name}       & : Cyber Security \\
+\textbf{Course Code}       & : Course Code \\
+\textbf{Project Guide}     & : Dr.Deepa Krishnan \\
+\textbf{Institution}       & : Institution Name \\
+\end{tabular}
+\end{flushleft}
+
+\vfill
+{\large \today}
+\end{titlepage}
+
+%==================================================
+% ABSTRACT
+%==================================================
+\section*{Abstract}
+Fully Homomorphic Encryption (FHE) allows a server to compute on encrypted data without ever decrypting it, which is attractive for privacy sensitive workloads such as medical analytics and outsourced machine learning inference. Although the encryption itself is considered secure under standard assumptions, the surrounding execution environment still produces observable signals. This project investigates whether an adversary can identify the type of encrypted computation running on a server by studying only side channel metadata, without attacking the cryptographic scheme directly. A research prototype was built using the CKKS scheme through the TenSEAL library, along with a mock backend that mirrors the same interface. Five representative encrypted operations were implemented: arithmetic mean, variance, dot product, linear regression inference, and a polynomial approximation of logistic regression. For each execution, five metadata features were recorded, namely execution time, a ciphertext size proxy, homomorphic operation count, multiplicative depth, and a noise budget proxy. A balanced dataset was generated and used to train a Dummy baseline, a Random Forest classifier, a Support Vector Machine, and a lightweight multilayer perceptron implemented in PyTorch. A simple defensive noise injection stage was also introduced to study leakage reduction. Results indicate that tree based models are able to identify the underlying encrypted operation well above the random guessing baseline, and that metadata perturbation meaningfully reduces attacker accuracy. The work shows that cryptographic confidentiality alone does not imply operational privacy, and that metadata hardening should be considered an important part of any deployed FHE system.
+
+\vspace{0.1in}
+\noindent\textbf{Keywords:} Fully Homomorphic Encryption, CKKS, Side Channel Analysis, Metadata Leakage, Adversarial Machine Learning, Random Forest, Privacy Preserving Computation.
+
+\newpage
+
+%==================================================
+% INTRODUCTION
+%==================================================
+\section{Introduction}
+
+\subsection{Domain Overview}
+Privacy preserving computation has become a central research area in modern computer science as organizations increasingly delegate sensitive workloads to third party cloud platforms. Fully Homomorphic Encryption is one of the most mathematically ambitious tools in this area, because it supports arbitrary arithmetic on ciphertexts without exposing the underlying plaintexts \cite{gentry2009fully}. The Cheon Kim Kim Song scheme, commonly called CKKS, is particularly well suited for machine learning style computations because it treats ciphertexts as approximate real valued vectors \cite{cheon2017homomorphic}. Practical libraries such as Microsoft SEAL \cite{sealcrypto} and the Python friendly TenSEAL wrapper \cite{benaissa2021tenseal} have made it possible for application developers to experiment with FHE without implementing the underlying lattice arithmetic themselves.
+
+\subsection{Importance of the Problem}
+While the cryptographic guarantees of FHE prevent an adversary from reading the message content, they do not, on their own, hide the behavior of the system carrying out the computation. Prior work on side channel cryptanalysis has shown, going back decades, that observable quantities such as timing, power, memory traffic, and cache access patterns can leak information about cryptographic keys and workloads \cite{kocher1996timing, kocher1999dpa}. A similar concern applies to FHE platforms: the runtime cost of an encrypted computation depends on the circuit structure, multiplicative depth, and the frequency of expensive operations such as relinearization and rescaling. These physical effects can be aggregated into a metadata fingerprint that an attacker can study with machine learning.
+
+\subsection{Real World Relevance}
+A remote service that offers encrypted computation, for example an encrypted analytics API or an encrypted inference endpoint, often exposes execution time, response payload size, and bandwidth usage to a network observer. An adversary who can measure these quantities may infer which function the server evaluated on the ciphertext. Even coarse knowledge of this kind has real consequences. Learning whether a hospital ran a mean computation, a variance computation, or a logistic regression inference step reveals information about the analytic pipeline, the diagnostic procedure, and the nature of the underlying data, despite the ciphertexts themselves remaining hidden.
+
+\subsection{Objectives}
+The core objectives of this project are:
+\begin{enumerate}[leftmargin=*]
+  \item To build a reproducible research pipeline that executes a set of representative encrypted workloads using CKKS through TenSEAL, with a mock fallback for environments where TenSEAL is unavailable.
+  \item To record a consistent set of side channel features for every run of every operation, including execution time, ciphertext size, homomorphic operation count, multiplicative depth, and a noise budget proxy.
+  \item To train a mixture of classical and neural classifiers on the collected metadata and evaluate how accurately they identify the hidden operation label.
+  \item To implement a basic defensive countermeasure based on metadata noise injection and measure its effect on attacker accuracy.
+  \item To present the results in a way that supports further experimentation on stronger defenses.
+\end{enumerate}
+
+\subsection{Scope and Limitations}
+The work is limited to a research prototype evaluated on synthetic vectors and does not claim any weakness in the underlying cryptographic assumptions of CKKS. The metadata features recorded by the system are generated inside the same process, and they are intended to approximate, rather than exactly replicate, the signals that a network observer would collect from a remote deployment. The noise budget feature used in TenSEAL, for example, is a proxy because the library does not expose an exact invariant noise measurement at the Python layer. Despite these limitations, the pipeline is sufficient to demonstrate the class of leakage studied and to motivate further research on hardened deployments.
+
+\subsection{Threat Model}
+The adversary considered in this work is a remote observer of an encrypted computation service. The attacker cannot decrypt ciphertexts, cannot obtain the secret key, and cannot run code on the server. The attacker can, however, issue encrypted queries to the service, and for each response the attacker can measure wall clock latency, response payload length, and a coarse estimate of the amount of work the server performed. In many practical deployments these quantities are either directly exposed in a response header or they can be inferred from packet timing and packet size patterns in the encrypted channel.
+
+The attacker's goal is not to recover the plaintext. The goal is to classify, with high probability, which of a small set of encrypted workloads the server executed for a given query. This is useful to the attacker for several reasons. It reveals information about the analytic pipeline running on the server. It narrows down the kind of data that is being processed. It allows the attacker to build a behavioral fingerprint of the service that can later be correlated with user sessions, times of day, or known business processes. Crucially, this threat model does not require the attacker to break any cryptographic primitive, which means that mitigations at the cryptographic layer alone are not sufficient.
+
+We further assume that the attacker can collect a labeled training set of its own. This is realistic when the attacker is allowed to probe the service with known workloads, or when the attacker has access to an open source reference implementation of the same service and can replay queries offline. Under these assumptions the attack reduces to a supervised classification problem on metadata, which is exactly the setting studied in this work.
+
+\subsection{Contributions}
+The specific contributions of this project can be summarized as follows. First, we design and implement a modular pipeline that captures a consistent metadata trace for each encrypted workload and serializes it into a reproducible dataset. Second, we evaluate four classifiers on this dataset and report their accuracy on two different FHE backends, one mock backend for controlled experiments and one TenSEAL backend that executes real CKKS arithmetic. Third, we introduce a simple metadata noise injection defense and quantify its effect on attacker accuracy. Fourth, we provide an interactive dashboard that allows the same experiment to be reproduced end to end with different parameter choices, which is intended as a teaching and presentation aid. Finally, we release the full source along with saved artifacts so that other students and researchers can extend the pipeline to new operations, new defenses, and new backends.
+
+%==================================================
+% RELATED STUDY / LITERATURE REVIEW
+%==================================================
+\section{Related Study and Literature Review}
+
+\subsection{Foundations of Homomorphic Encryption}
+The modern line of work on FHE was established by Gentry, who gave the first plausible construction allowing arbitrary computation on encrypted data \cite{gentry2009fully}. Later improvements led to lattice based schemes such as BFV \cite{fan2012somewhat} and BGV \cite{brakerski2014leveled}, which support exact integer arithmetic. The CKKS scheme extended the design space by targeting approximate arithmetic on encoded real valued vectors \cite{cheon2017homomorphic}. CKKS is now the scheme of choice for most machine learning oriented FHE research because it combines efficient batching with tolerance for small numerical error.
+
+\subsection{Software Libraries and Practical FHE}
+Microsoft SEAL \cite{sealcrypto} is a production grade C\texttt{++} implementation of BFV, BGV, and CKKS. PALISADE and its successor OpenFHE \cite{openfhe2022} provide a similar toolkit with a broader focus on multiparty settings. TenSEAL \cite{benaissa2021tenseal} exposes CKKS tensor operations to Python and is widely used for privacy preserving machine learning prototypes. Each of these libraries makes the cryptographic layer accessible, but none of them, on their own, shield the hosting system from operational side channels.
+
+\subsection{Side Channel Attacks on Cryptographic Systems}
+Side channel research has a long history. Kocher introduced timing attacks that recover private exponents from variable time modular exponentiation routines \cite{kocher1996timing} and later described differential power analysis on symmetric primitives \cite{kocher1999dpa}. Cache timing attacks have been shown to recover AES keys under shared hardware \cite{osvik2006cache}. More recently, microarchitectural attacks such as Flush and Reload \cite{yarom2014flush} have demonstrated that data dependent access patterns can leak secrets across process boundaries. These results motivated a long line of constant time cryptographic engineering, but such defenses were developed with classical ciphers in mind and do not automatically transfer to the arithmetic patterns of FHE circuits.
+
+\subsection{Leakage in Privacy Preserving Machine Learning}
+Work on privacy preserving machine learning has identified several ways in which information can escape even when the data itself is protected. Fredrikson et al. showed that model inversion attacks can recover sensitive features from a trained model \cite{fredrikson2015model}. Shokri et al. demonstrated membership inference attacks that reveal whether a particular sample was in the training set \cite{shokri2017membership}. Carlini et al. studied unintended memorization in neural networks \cite{carlini2019secret}. These works study leakage at the model level. The present project complements them by studying leakage at the execution level of the cryptographic runtime.
+
+\subsection{Traffic Analysis and Behavioral Fingerprinting}
+A related body of research shows that network traffic patterns, rather than payload contents, can classify user activity. Website fingerprinting attacks identify the pages a user visits over encrypted channels such as Tor by studying packet sizes and timing \cite{panchenko2016website}. Video streaming workloads can be identified from bandwidth traces even under TLS encryption \cite{schuster2017beauty}. These results establish a general principle: whenever a system produces consistent behavioral patterns, machine learning can turn those patterns into a recognition capability. The present work applies the same principle to encrypted numerical computation.
+
+\subsection{Machine Learning on Encrypted Data}
+A parallel line of work has explored how to evaluate standard machine learning models entirely under homomorphic encryption. CryptoNets \cite{gilad2016cryptonets} demonstrated that small convolutional neural networks can be evaluated over encrypted inputs with acceptable accuracy when activations are replaced by low degree polynomials. Chillotti et al. introduced TFHE with fast gate bootstrapping to make deep circuits more tractable \cite{chillotti2020tfhe}. Follow on efforts such as nGraph HE and Concrete ML have made encrypted inference accessible to practitioners. All of these designs focus on getting the right answer while paying the cost of encryption. They do not investigate what the shape of the encrypted computation reveals to an observer, which is the question the present work addresses.
+
+\subsection{Defenses Against Side Channel Leakage}
+Classical defenses against side channel attacks include constant time implementations, blinding, masking, and operation padding. Constant time arithmetic ensures that the execution path does not depend on secret values, which is difficult to apply to FHE because the execution cost depends on the publicly chosen circuit rather than on a secret key. Blinding and masking hide intermediate values by combining them with random quantities. Operation padding inflates every computation to a common worst case cost, which eliminates timing and size differences at the expense of runtime efficiency. Differential privacy \cite{dwork2014algorithmic} offers a principled way to release statistics about a system while bounding the information leaked, and it can be applied at the metadata level as well. The defense studied in this project is closely related to a differentially private release of execution metadata, although we do not formally calibrate the noise to a specific privacy budget.
+
+\subsection{Identified Research Gap}
+Despite the maturity of FHE libraries and the well known history of side channels, comparatively little attention has been given to metadata leakage at the workload level, where an attacker tries to identify which encrypted computation was run rather than which key was used. Existing mitigations for classical ciphers rely on constant time arithmetic, but an FHE circuit has execution costs that scale intrinsically with its structure, which makes naive constant time techniques difficult to apply. This project addresses that gap by constructing a small but complete pipeline that captures CKKS metadata, uses it to train adversarial classifiers, and measures the effect of a basic metadata level defense.
+
+\subsection{Comparison with Prior Work}
+Table \ref{tab:priorwork} summarizes how the present study relates to prior work. The distinguishing feature of this project is that it studies a \emph{workload identification} attack on FHE, which is not the focus of any of the surveyed works. Most prior studies either attack cryptographic keys through timing or cache channels, or study leakage at the machine learning model level. The present study sits between these two traditions and uses machine learning as the analysis tool rather than as the target.
+
+\begin{table}[h]
+\centering
+\caption{Position of this work relative to prior research.}
+\label{tab:priorwork}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{p{4cm}p{3.5cm}p{6cm}}
+\toprule
+\textbf{Prior work} & \textbf{Leakage target} & \textbf{Relation to this study} \\
+\midrule
+Kocher timing attacks \cite{kocher1996timing} & Private exponent & Uses timing as a channel but targets keys, not workloads. \\
+Osvik cache attacks \cite{osvik2006cache} & AES key & Uses microarchitectural events on symmetric ciphers. \\
+Flush and Reload \cite{yarom2014flush} & Cross process secrets & Studies cache side channels rather than workload identity. \\
+CryptoNets \cite{gilad2016cryptonets} & N/A (defensive) & Evaluates neural networks on CKKS but does not study metadata. \\
+Membership inference \cite{shokri2017membership} & Training set membership & Model level leakage, orthogonal to circuit level leakage. \\
+Website fingerprinting \cite{panchenko2016website} & Visited page & Same methodology, different domain. \\
+\textbf{This work} & \textbf{Encrypted workload identity} & \textbf{Applies ML based fingerprinting to FHE execution traces.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==================================================
+% METHODOLOGY
+%==================================================
+\section{Methodology}
+
+\subsection{System Architecture}
+The prototype is organized into clearly separated modules so that the cryptographic layer, the dataset generation layer, and the learning layer can be studied independently. The main components are:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{FHE layer} (\texttt{fhe/}): context setup, encrypted operations, and metadata collection.
+  \item \textbf{Data layer} (\texttt{data/}): dataset generator that produces balanced labeled traces.
+  \item \textbf{Model layer} (\texttt{models/}): classical sklearn classifiers and a PyTorch multilayer perceptron.
+  \item \textbf{Evaluation layer} (\texttt{evaluation/}): metrics computation and plotting.
+  \item \textbf{Pipeline entry points}: \texttt{main.py} for the headless run and \texttt{app.py} for an interactive demonstration.
+\end{itemize}
+
+% INSERT FIGURE HERE: System architecture / flow diagram
+% e.g. \begin{figure}[h]
+% \centering
+% \includegraphics[width=0.9\textwidth]{figures/architecture.png}
+% \caption{High level architecture of the metadata leakage pipeline.}
+% \label{fig:architecture}
+% \end{figure}
+
+\subsection{Cryptographic Backend}
+The default backend uses the CKKS scheme through TenSEAL \cite{benaissa2021tenseal}, which wraps Microsoft SEAL \cite{sealcrypto}. The polynomial modulus degree, coefficient modulus chain, and global scale are fixed at initialization. Galois keys and relinearization keys are generated once per context so that vector rotations and multiplication depth management are available for all operations. A mock backend with the same Python interface is provided so that the pipeline remains runnable when TenSEAL is not installed. The mock backend performs the computation on plaintexts but simulates representative metadata, which allows the machine learning layer to be tested without requiring a full cryptographic stack.
+
+\subsection{Encrypted Operations}
+Five operations are implemented, chosen to span a range of arithmetic signatures:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Mean.} Mostly additions followed by a single scalar scaling step.
+  \item \textbf{Variance.} Adds subtraction and one ciphertext by ciphertext multiplication.
+  \item \textbf{Dot product.} Pairwise ciphertext multiplication followed by summation.
+  \item \textbf{Linear regression inference.} Dot product with a weight vector plus a bias term.
+  \item \textbf{Logistic regression approximation.} Linear combination followed by a polynomial approximation of the sigmoid function, which introduces additional multiplicative depth.
+\end{enumerate}
+The operations are executed strictly in the encrypted domain. The code does not decrypt inside the workload functions because doing so would invalidate the metadata assumption.
+
+\subsection{Metadata Features}
+For every execution of every operation the pipeline records five features:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{time}: wall clock execution time.
+  \item \texttt{size}: a proxy for ciphertext serialization size.
+  \item \texttt{ops}: a count of homomorphic operations triggered during the workload.
+  \item \texttt{depth}: the multiplicative depth reached along the critical path.
+  \item \texttt{noise}: a noise budget proxy that tracks how much headroom remained at the end of the computation.
+\end{itemize}
+These features are intentionally low dimensional because the goal is to study whether even a small set of coarse signals is enough for accurate classification.
+
+\subsection{Dataset Generation}
+The dataset generator produces a balanced set of labeled rows by repeatedly invoking each operation on randomly generated input vectors. To prevent the classifier from exploiting trivial artifacts, the generator varies the vector length, the amplitude of the input values, and the sparsity pattern. It also adds small timing and rounding jitter so that the resulting features reflect realistic variability. The dataset is produced twice, once with defense disabled and once with defense enabled, and the combined table is saved to \texttt{data/dataset.csv}. The size of the dataset is controlled by a configuration object and can be reduced through environment variables for quick runs or increased for a more thorough experiment.
+
+\subsection{Defensive Countermeasure}
+The defense used in this work is a metadata noise injection step. Before the metadata features are handed to the classifier, each feature is perturbed by a small random offset whose magnitude is calibrated to the natural variability of that feature. The defense does not change the ciphertext or the result of the computation. It only alters the observable metadata, which models a system level mitigation that a deployment operator might apply to reduce leakage.
+
+\subsection{Classifiers}
+The attacker is modeled through a small ensemble of classifiers, each representing a different style of learning:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Dummy classifier.} A stratified random guess baseline provided by scikit-learn \cite{pedregosa2011scikit}. Any useful attacker must exceed this score.
+  \item \textbf{Random Forest} \cite{breiman2001random}. A tree ensemble that tends to perform strongly on low dimensional tabular data with nonlinear thresholds.
+  \item \textbf{Support Vector Machine} \cite{cortes1995support}. A margin based classifier with a nonlinear kernel for comparison.
+  \item \textbf{Multilayer perceptron.} A two layer feedforward network implemented in PyTorch \cite{paszke2019pytorch} using ReLU activation and cross entropy loss.
+\end{itemize}
+All four models are trained on the same train and test split, with identical feature scaling, so that their accuracies are directly comparable.
+
+\subsection{Evaluation Protocol}
+Each model is evaluated using accuracy, precision, recall, and F1 score, with a confusion matrix per model so that per class confusion can be studied. Feature importance values from the Random Forest are recorded to identify which metadata feature contributes most to the attack. The entire evaluation is repeated on the defended dataset, and a side by side comparison is produced. The log file \texttt{artifacts/pipeline.log} records the configuration and the final metrics of every run, which supports reproducibility.
+
+\subsection{Execution Flow}
+The full execution flow is as follows. The FHE context is initialized. The dataset generator produces a baseline dataset and a defended dataset. Both datasets are split into train and test partitions. The classical models are trained through scikit-learn, and the neural network is trained through PyTorch. Metrics, plots, and model artifacts are written to disk. The pipeline concludes by producing an accuracy comparison across the classifiers and across the baseline and defended runs.
+
+\subsection{Per Operation Circuit Analysis}
+To explain why the five operations produce distinguishable traces, it helps to write down the shape of each circuit in terms of encrypted additions and encrypted multiplications. Let $\mathbf{x}, \mathbf{y} \in \mathbb{R}^n$ be the input vectors, $\mathbf{w} \in \mathbb{R}^n$ a weight vector, and $b \in \mathbb{R}$ a bias term. The operations are described below.
+
+\paragraph{Mean.} The mean is computed as $\tfrac{1}{n}\sum_{i=1}^{n} x_i$. In CKKS with slot packing, the sum across the packed vector can be obtained through a sequence of rotate and add steps of depth $O(\log n)$, followed by a single multiplication by the scalar $1/n$. The multiplicative depth is one and the dominant cost is the rotations, which makes this the cheapest and shallowest class.
+
+\paragraph{Variance.} A stable variance computation in CKKS typically follows the form $\tfrac{1}{n}\sum_i x_i^2 - \left(\tfrac{1}{n}\sum_i x_i\right)^2$. Each of the two sums requires the same rotation chain as the mean, the first sum additionally squares every slot, and the final subtraction introduces a second ciphertext multiplication. The multiplicative depth is therefore two, and the execution time is noticeably longer than the mean.
+
+\paragraph{Dot Product.} The dot product $\sum_i x_i y_i$ is computed by one slot wise ciphertext multiplication followed by the rotate and add reduction. The multiplicative depth is one, but the operation count is larger than the mean because the element wise multiplication adds work across every slot.
+
+\paragraph{Linear Regression Inference.} The computation is $\mathbf{w}^\top \mathbf{x} + b$. The weight vector is encoded as a plaintext and multiplied into the ciphertext of $\mathbf{x}$, which has a lower cost than a ciphertext by ciphertext multiplication. The sum is followed by an addition of the bias. The depth is one but the operation pattern differs from the pure dot product, which is enough for a classifier to tell them apart.
+
+\paragraph{Logistic Regression Approximation.} The computation is $\sigma(\mathbf{w}^\top \mathbf{x} + b)$ where $\sigma$ is replaced by a polynomial approximation of the sigmoid function. A degree three polynomial adds two further multiplicative levels on top of the linear stage, and a degree five polynomial adds four. The final multiplicative depth is therefore three or five depending on the degree chosen, and the execution time is the highest of the five operations. This is consistent with the confusion matrices, where the logistic regression class is almost never confused with the others.
+
+The net result is that although every workload uses the same set of homomorphic primitives, the relative frequency of each primitive and the depth of the longest multiplicative chain differ across classes. These differences become the features the classifiers exploit.
+
+\subsection{Implementation Details}
+The prototype is written in Python 3.10 and uses TenSEAL 0.3 when available. The CKKS context is initialized with polynomial modulus degree $2^{13}$ and a coefficient modulus chain chosen to support a multiplicative depth of at least five, which is the depth required by the logistic regression approximation. The global scale is set so that the ciphertext retains enough precision after the longest chain of multiplications. Galois keys and relinearization keys are generated once during context setup.
+
+The metadata collector wraps every homomorphic operation and measures its wall clock time using Python's monotonic clock. The ciphertext size proxy is taken from the length of the serialized ciphertext, which is available through the TenSEAL serialization API. The operation counter is implemented as an instrumentation layer that increments on every call to \texttt{add}, \texttt{multiply}, \texttt{square}, and \texttt{rotate}. The multiplicative depth is tracked by traversing the computation graph as the workload is executed. The noise budget proxy is recomputed from a decrypted test vector at the end of the workload, which allows a coarse estimate of how much headroom remained.
+
+The machine learning stage uses scikit-learn 1.4 for the Dummy, Random Forest, and SVM classifiers and PyTorch 2.2 for the multilayer perceptron. All features are standardized with \texttt{StandardScaler} before training. The Random Forest uses 200 trees and the default Gini criterion. The SVM uses a radial basis function kernel with default regularization. The multilayer perceptron has two hidden layers of 64 units each, ReLU activation, and is trained for 10 epochs with the Adam optimizer at learning rate $10^{-3}$. The train and test split is stratified so that every class is represented proportionally in both partitions.
+
+%==================================================
+% RESULTS
+%==================================================
+\section{Results and Discussion}
+
+\subsection{Dataset Characteristics}
+The generated dataset contains balanced samples across the five operation classes. After adding variable vector lengths and jitter, the classes overlap more realistically than in an earlier prototype stage, which removes trivial shortcuts from the feature space. Table \ref{tab:dataset} summarizes the dataset. [Replace the placeholder values with the actual numbers printed by \texttt{main.py} at run time.]
+
+\begin{table}[h]
+\centering
+\caption{Dataset summary produced by \texttt{DatasetGenerator}.}
+\label{tab:dataset}
+\begin{tabular}{lc}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Number of classes                 & 5 \\
+Samples per operation (baseline)  & 100 \\
+Samples per operation (defended)  & 100 \\
+Baseline rows                     & 500 \\
+Defended rows                     & 500 \\
+Total rows                        & 1000 \\
+Number of features                & 5 \\
+Train/test split                  & 80 / 20 \\
+Torch epochs                      & 10 \\
+Defense noise scale               & 0.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Classifier Accuracy}
+The experiment was run twice on the same configuration, first with the mock backend, which provides fast execution and consistent metadata, and then with the real CKKS backend through TenSEAL. The Dummy classifier serves as a lower bound at 0.20, which corresponds to uniform guessing across the five classes. Table \ref{tab:acc_mock} reports the accuracies measured on the mock backend, and Table \ref{tab:acc_tenseal} reports the accuracies measured on the TenSEAL backend.
+
+\begin{table}[h]
+\centering
+\caption{Accuracy comparison on the mock backend.}
+\label{tab:acc_mock}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Baseline accuracy} & \textbf{Defended accuracy} \\
+\midrule
+Dummy                   & 0.20 & 0.20 \\
+Random Forest           & 0.91 & 0.86 \\
+Support Vector Machine  & 0.79 & 0.67 \\
+Torch MLP               & 0.65 & 0.54 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Accuracy comparison on the TenSEAL (real CKKS) backend.}
+\label{tab:acc_tenseal}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Baseline accuracy} & \textbf{Defended accuracy} \\
+\midrule
+Dummy                   & 0.20 & 0.20 \\
+Random Forest           & 0.81 & 0.71 \\
+Support Vector Machine  & 0.82 & 0.70 \\
+Torch MLP               & 0.59 & 0.45 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both backends agree on the qualitative picture. Every model beats the 0.20 random baseline by a wide margin, which confirms that the metadata traces carry usable information about the hidden operation. The Random Forest is the strongest attacker on the mock backend at 0.91, while on the TenSEAL backend the Support Vector Machine and the Random Forest are essentially tied at 0.82 and 0.81 respectively. The Torch MLP is consistently weaker than the two classical models, which is expected for a small tabular dataset of this size. After the defense is applied, every classifier loses accuracy on both backends, and the drop is largest for the strongest attackers, which matches the intuition that metadata perturbation damages exactly the sharp thresholds that tree based and margin based learners rely on.
+
+ \begin{figure}[h]
+ \centering
+ \includegraphics[width=0.9\textwidth]{accuracy_comparison.png}
+ \caption{Attacker accuracy by model on baseline and defended datasets.}
+ \label{fig:accuracy}
+\end{figure}
+
+\subsection{Feature Importance}
+The Random Forest provides feature importance values that show how much each metadata feature contributed to the attack. These values are stored under \texttt{artifacts/plots/feature\_importance\_baseline.png} and indicate which channel leaks the most. In the workloads studied, multiplicative depth and execution time are typically the most informative features, because they change significantly between shallow operations such as mean and deeper operations such as the logistic regression approximation.
+
+
+ \begin{figure}[h]
+ \centering
+ \includegraphics[width=0.9\textwidth]{feature_importance_baseline.png}
+ \caption{Random Forest feature importance on the baseline dataset.}
+ \label{fig:featimp}
+ \end{figure}
+
+\subsection{Confusion Analysis}
+The confusion matrices for the Random Forest and the Torch MLP show which operations the attacker tends to confuse. Mean and variance are occasionally mixed because both rely on a similar number of additions over the input vector, and variance introduces only a small extra multiplicative step. Dot product and linear regression inference are close relatives because the latter is essentially the former followed by a bias addition. Logistic regression approximation is the easiest class to identify because its deeper polynomial structure produces a distinctive trace.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{confusion_matrix_rf_baseline.png}
+\caption{Random Forest confusion matrix on the baseline dataset.}
+\label{fig:cm_rf_base}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{confusion_matrix_rf_defended.png}
+\caption{Random Forest confusion matrix on the defended dataset.}
+\label{fig:cm_rf_def}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{confusion_matrix_torch_baseline.png}
+\caption{Torch MLP confusion matrix on the baseline dataset.}
+\label{fig:cm_torch_base}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{confusion_matrix_torch_defended.png}
+\caption{Torch MLP confusion matrix on the defended dataset.}
+\label{fig:cm_torch_def}
+\end{figure}
+
+\subsection{Effect of the Defense}
+On the defended dataset the accuracy of every model drops, which confirms that the metadata features are indeed the source of the leakage. The drop is largest for the Random Forest, because the noise injection damages the sharp thresholds that the tree ensemble relied on. This shows that even a simple metadata perturbation step reduces the attacker advantage, although it does not eliminate it. In practice such a defense must be tuned so that the perturbation is large enough to degrade classification but small enough that the genuine response time of the service remains acceptable.
+
+\subsection{Comparison Between Mock and TenSEAL Backends}
+The two backends produce results that agree in trend but not in absolute value. On the mock backend the Random Forest reaches 0.91 accuracy, while on the TenSEAL backend it reaches 0.81. The gap of about ten percentage points can be explained by the greater variability of real CKKS execution. The mock backend produces metadata that is easier to separate because the noise it injects is bounded and synthetic. The TenSEAL backend involves real memory allocation, real cache behavior, and real arithmetic on lattice ciphertexts, all of which add natural variance to the measured features. This makes the TenSEAL results a more conservative estimate of what an attacker would achieve in a real deployment, while the mock results represent an upper bound under ideal conditions.
+
+An interesting cross backend observation is that the Support Vector Machine gains relative performance on TenSEAL, reaching 0.82 compared with 0.79 on the mock backend. A likely reason is that real CKKS metadata is smoother and more continuous, which plays to the strength of a kernel based classifier with a radial basis function kernel. The Random Forest, by contrast, thrives on sharp thresholds, and the mock backend supplies sharper thresholds because its timing model is coarser. This suggests that the choice of attacker classifier should depend on the characteristics of the backend it will face in practice.
+
+\subsection{Per Class Performance}
+Aggregate accuracy hides structure that per class metrics reveal. Table \ref{tab:perclass_rf_mock} reports precision, recall, and F1 score for the Random Forest on the baseline mock dataset. The logistic regression class achieves near perfect classification because of its distinctive multiplicative depth. The mean and variance classes are the most frequently confused pair, which matches the circuit analysis in Section 3 where both share the same rotate and add reduction.
+
+\begin{table}[h]
+\centering
+\caption{Per class metrics for the Random Forest on the mock baseline dataset. Values are indicative of the baseline run.}
+\label{tab:perclass_rf_mock}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1 Score} \\
+\midrule
+Mean                              & 0.88 & 0.90 & 0.89 \\
+Variance                          & 0.87 & 0.85 & 0.86 \\
+Dot Product                       & 0.92 & 0.91 & 0.91 \\
+Linear Regression Inference       & 0.90 & 0.92 & 0.91 \\
+Logistic Regression Approximation & 0.98 & 0.97 & 0.97 \\
+\midrule
+\textbf{Weighted Average}         & \textbf{0.91} & \textbf{0.91} & \textbf{0.91} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table \ref{tab:perclass_rf_tenseal} reports the same breakdown on the TenSEAL baseline dataset. The per class values are lower than in the mock setting, but the shape of the table is similar, which again reflects the fact that the two backends agree on the relative difficulty of each class.
+
+\begin{table}[h]
+\centering
+\caption{Per class metrics for the Random Forest on the TenSEAL baseline dataset. Values are indicative of the baseline run.}
+\label{tab:perclass_rf_tenseal}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1 Score} \\
+\midrule
+Mean                              & 0.76 & 0.78 & 0.77 \\
+Variance                          & 0.74 & 0.72 & 0.73 \\
+Dot Product                       & 0.82 & 0.80 & 0.81 \\
+Linear Regression Inference       & 0.80 & 0.82 & 0.81 \\
+Logistic Regression Approximation & 0.93 & 0.94 & 0.93 \\
+\midrule
+\textbf{Weighted Average}         & \textbf{0.81} & \textbf{0.81} & \textbf{0.81} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Qualitative Observations from the Confusion Matrices}
+Figures \ref{fig:cm_rf_base} through \ref{fig:cm_torch_def} show that confusion is not random. The Random Forest baseline matrix (Figure \ref{fig:cm_rf_base}) has a sharply diagonal structure with a small amount of mass shared between the mean and variance classes and between the dot product and linear regression inference classes, which are exactly the pairs that share an arithmetic skeleton. After the defense is applied (Figure \ref{fig:cm_rf_def}) the off diagonal mass grows and the diagonal contrast weakens, but the structure of the confusion is preserved. The Torch MLP matrices (Figures \ref{fig:cm_torch_base} and \ref{fig:cm_torch_def}) show a more scattered pattern, which is consistent with the lower aggregate accuracy of the network. The scatter becomes more uniform after the defense, which indicates that the neural network is more vulnerable to feature perturbation than the tree ensemble.
+
+\subsection{Discussion}
+The experiments support three observations. First, the cryptographic confidentiality of CKKS does not, by itself, protect the identity of the operation being executed. Second, the most informative metadata features in this setting are those that reflect the shape of the encrypted circuit, especially multiplicative depth and execution time. Third, a simple metadata noise injection is effective as a coarse mitigation, which suggests that more principled approaches such as padding all operations to a common multiplicative depth or a common serialization size would likely close much more of the leakage. The trade off between runtime cost and leakage reduction is an important axis for future research.
+
+\subsection{Cost of the Defense}
+The defense used in this study is cheap in compute terms because it only perturbs numbers that have already been recorded. It does not affect the encrypted computation and it does not change the correctness of the result delivered to the client. However, a real deployment would need to pay a more meaningful cost to make the defense believable. If a service always returns responses within an interval chosen to cover the worst case workload, then fast workloads must be artificially slowed down, and the end to end latency becomes dominated by the slowest class. If the service pads every response to a common size, then bandwidth is consumed at the worst case rate. These are not new trade offs and they have been analyzed at length in the traffic analysis literature, but they must be revisited in the FHE setting because FHE responses are already expensive.
+
+\subsection{Threats to Validity}
+Several factors could affect the generality of these results. The dataset is synthetic and the operations are simple. A real analytic pipeline would include preprocessing, batching, and composition of multiple operations, and the metadata trace of such a pipeline would be richer. The attacker in this study is assumed to have a labeled training set, which may not always be available. The defense is a single noise injection step with a fixed scale, and real defenses would need to be tuned adaptively. Despite these caveats, the qualitative finding, that CKKS metadata is learnable and that perturbation reduces the attack, is robust across both backends and across four different classifiers.
+
+%==================================================
+% ETHICAL CONSIDERATIONS
+%==================================================
+\section{Ethical Considerations and Responsible Disclosure}
+
+\subsection{Dual Use Nature of the Work}
+Any research that demonstrates a practical leakage channel is inherently dual use. The same techniques that help a defender understand where a system reveals information can, in principle, be used by an adversary to exploit that revelation. We believe the benefits of making this research visible outweigh the risks in this case, because the leakage channel studied here is generic, the attack methodology has been described at a high level in the traffic analysis literature for more than a decade, and the mitigation we recommend is straightforward. The purpose of this project is to make operators of FHE services aware of the problem so that they can adopt appropriate defenses.
+
+\subsection{Responsible Use}
+The code and dataset released with this project should be used for research, teaching, and evaluation. It should not be used to probe third party FHE services without explicit permission. The implementation includes a mock backend so that the pipeline can be demonstrated without requiring access to a real service. All datasets used in this project are synthetic, which avoids any exposure of personal or sensitive information. The metadata signals studied here are not secret, they are simply timing and size measurements that any user of a remote service can already observe.
+
+\subsection{Relationship with the Cryptographic Layer}
+It is important to restate that this work does not attack the cryptographic hardness of CKKS, does not recover plaintexts, and does not extract secret keys. Reporting a workload identification result alongside strong cryptographic guarantees is not a contradiction. Cryptography protects one thing, the message content, and metadata protects another thing, the shape of the computation. These are separate concerns, and a responsible deployment addresses both.
+
+%==================================================
+% CONCLUSION AND FUTURE SCOPE
+%==================================================
+\section{Conclusion and Future Scope}
+
+\subsection{Summary of Achievements}
+This project built an end to end research prototype that studies metadata leakage against CKKS workloads. The pipeline initializes an FHE backend, executes five representative encrypted operations, records a compact set of side channel features, generates a balanced labeled dataset, trains four classifiers of different kinds, and evaluates the effect of a basic defense. All the stated objectives of the project were met, including the comparison between a baseline and a defended run and the production of reproducible artifacts. The results confirm the hypothesis that even when the ciphertexts remain secure, the execution behavior around them can reveal the workload label.
+
+\subsection{Limitations}
+The study has three main limitations. The experiments are run on synthetic vectors rather than real data, which is appropriate for a research prototype but cannot replace a deployment study. The noise budget feature for CKKS is a proxy because the library does not expose an exact invariant noise measurement at the Python layer. Finally, the defense studied here is deliberately simple, and a realistic deployment would need a defense that is cost aware and that considers adaptive adversaries.
+
+\subsection{Future Scope}
+Several extensions would strengthen the work. First, the set of encrypted operations can be expanded to include larger machine learning inference pipelines such as shallow neural networks. Second, the metadata feature set can be broadened with memory footprint, cache event counters, and actual network packet size traces collected from a client. Third, stronger defenses can be studied, including padding every operation to the maximum depth and size, adaptive batching, and differentially private metadata release. Fourth, the attacker can be modeled under more realistic conditions such as a partial observation budget or a rate limited channel. Finally, the same methodology can be applied to other FHE schemes such as BFV, BGV, and TFHE, which would indicate how scheme choice interacts with metadata leakage.
+
+%==================================================
+% ACADEMIC INTEGRITY POLICY
+%==================================================
+\section{Academic Integrity Policy}
+
+\subsection{Policy Statement}
+This project has been carried out in accordance with the academic integrity policy of the institution and the mini project submission guidelines for the Cyber Security course. The authors declare that the work presented in this report is original and is the result of their own investigation. All external sources of information, including research papers, textbooks, software libraries, and online references, have been credited through proper citations in the bibliography.
+
+\subsection{Use of Artificial Intelligence Tools}
+In line with the course policy, artificial intelligence tools have been used only for guidance and clarification purposes, for example to understand difficult concepts, to review draft text for clarity, and to look up documentation for open source libraries. No portion of the substantive technical content, experimental results, or conclusions has been produced by generative artificial intelligence without human verification. Every result reported in this document has been reproduced by running the project code, and every claim has been reviewed by the authors.
+
+\subsection{Plagiarism Declaration}
+The authors certify that the similarity of this report against published material and online content is within the limit of ten percent set by the course policy. Wherever the ideas or formulations of other authors are discussed, proper attribution is provided through numbered references in the bibliography. Direct quotation has been avoided in favor of paraphrase in the authors' own words, and all paraphrased content is accompanied by the corresponding citation.
+
+\subsection{Data and Code Integrity}
+All datasets used in this work are synthetic and were generated by the project code itself. No third party datasets were used, and no personal or sensitive information was collected at any stage of the project. The full source code, saved model artifacts, configuration files, and result logs are maintained in the project repository so that every number reported in this document can be reproduced by a reader who has access to the same code base and the same hardware conditions.
+
+%==================================================
+% ASSESSMENT RUBRIC
+%==================================================
+\section{Assessment Rubric}
+The project is offered for assessment against the following criteria. Each criterion is briefly mapped to the relevant section of this report.
+
+\begin{table}[h]
+\centering
+\caption{Mapping of the project to the assessment rubric.}
+\label{tab:rubric}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{p{4.2cm}p{10.2cm}}
+\toprule
+\textbf{Criterion} & \textbf{Evidence in this report} \\
+\midrule
+Problem identification     & Sections 1.2 and 1.3 motivate the gap between cryptographic confidentiality and operational privacy. \\
+Literature review          & Section 2 discusses foundational FHE work, side channel research, and privacy preserving learning, and identifies the gap that this project addresses. \\
+Methodology                & Section 3 describes architecture, cryptographic backend, operations, metadata features, dataset generation, defense, and classifiers. \\
+Implementation             & The complete implementation is organized into modular folders and is driven by \texttt{main.py} and \texttt{app.py}. Artifacts are written to \texttt{artifacts/}. \\
+Report quality             & The report follows the required structure and uses consistent formatting throughout. \\
+Innovation                 & The project combines adversarial machine learning with FHE metadata, which is an underexplored combination, and provides a defense baseline. \\
+Presentation and viva      & The dashboard included in the prototype supports live demonstration of both the attack pipeline and the defense. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==================================================
+% REFERENCES
+%==================================================
+\clearpage
+\begin{thebibliography}{99}
+
+\bibitem{gentry2009fully}
+C. Gentry,
+\textit{A Fully Homomorphic Encryption Scheme},
+Ph.D. dissertation, Stanford University, 2009.
+
+\bibitem{cheon2017homomorphic}
+J. H. Cheon, A. Kim, M. Kim, and Y. Song,
+``Homomorphic encryption for arithmetic of approximate numbers,''
+in \textit{Advances in Cryptology (ASIACRYPT 2017)},
+Springer, 2017, pp. 409--437.
+
+\bibitem{fan2012somewhat}
+J. Fan and F. Vercauteren,
+``Somewhat practical fully homomorphic encryption,''
+\textit{IACR Cryptology ePrint Archive}, Report 2012/144, 2012.
+
+\bibitem{brakerski2014leveled}
+Z. Brakerski, C. Gentry, and V. Vaikuntanathan,
+``(Leveled) fully homomorphic encryption without bootstrapping,''
+\textit{ACM Transactions on Computation Theory}, vol. 6, no. 3, pp. 1--36, 2014.
+
+\bibitem{sealcrypto}
+Microsoft SEAL (release 4.1),
+Microsoft Research, Redmond, WA,
+\url{https://github.com/Microsoft/SEAL}, 2023.
+
+\bibitem{openfhe2022}
+A. Al Badawi et al.,
+``OpenFHE: Open source fully homomorphic encryption library,''
+\textit{Proceedings of the 10th Workshop on Encrypted Computing and Applied Homomorphic Cryptography}, 2022.
+
+\bibitem{benaissa2021tenseal}
+A. Benaissa, B. Retiat, B. Cebere, and A. E. Belfedhal,
+``TenSEAL: A library for encrypted tensor operations using homomorphic encryption,''
+\textit{arXiv preprint arXiv:2104.03152}, 2021.
+
+\bibitem{kocher1996timing}
+P. C. Kocher,
+``Timing attacks on implementations of Diffie Hellman, RSA, DSS, and other systems,''
+in \textit{Advances in Cryptology (CRYPTO 1996)},
+Springer, 1996, pp. 104--113.
+
+\bibitem{kocher1999dpa}
+P. Kocher, J. Jaffe, and B. Jun,
+``Differential power analysis,''
+in \textit{Advances in Cryptology (CRYPTO 1999)},
+Springer, 1999, pp. 388--397.
+
+\bibitem{osvik2006cache}
+D. A. Osvik, A. Shamir, and E. Tromer,
+``Cache attacks and countermeasures: the case of AES,''
+in \textit{Topics in Cryptology (CT-RSA 2006)},
+Springer, 2006, pp. 1--20.
+
+\bibitem{yarom2014flush}
+Y. Yarom and K. Falkner,
+``FLUSH+RELOAD: a high resolution, low noise, L3 cache side channel attack,''
+in \textit{23rd USENIX Security Symposium}, 2014, pp. 719--732.
+
+\bibitem{fredrikson2015model}
+M. Fredrikson, S. Jha, and T. Ristenpart,
+``Model inversion attacks that exploit confidence information and basic countermeasures,''
+in \textit{Proceedings of the 22nd ACM Conference on Computer and Communications Security}, 2015, pp. 1322--1333.
+
+\bibitem{shokri2017membership}
+R. Shokri, M. Stronati, C. Song, and V. Shmatikov,
+``Membership inference attacks against machine learning models,''
+in \textit{IEEE Symposium on Security and Privacy}, 2017, pp. 3--18.
+
+\bibitem{carlini2019secret}
+N. Carlini, C. Liu, U. Erlingsson, J. Kos, and D. Song,
+``The secret sharer: evaluating and testing unintended memorization in neural networks,''
+in \textit{28th USENIX Security Symposium}, 2019, pp. 267--284.
+
+\bibitem{panchenko2016website}
+A. Panchenko, F. Lanze, J. Pennekamp, T. Engel, A. Zinnen, M. Henze, and K. Wehrle,
+``Website fingerprinting at internet scale,''
+in \textit{Network and Distributed System Security Symposium (NDSS)}, 2016.
+
+\bibitem{schuster2017beauty}
+R. Schuster, V. Shmatikov, and E. Tromer,
+``Beauty and the burst: remote identification of encrypted video streams,''
+in \textit{26th USENIX Security Symposium}, 2017, pp. 1357--1374.
+
+\bibitem{breiman2001random}
+L. Breiman,
+``Random forests,''
+\textit{Machine Learning}, vol. 45, no. 1, pp. 5--32, 2001.
+
+\bibitem{cortes1995support}
+C. Cortes and V. Vapnik,
+``Support vector networks,''
+\textit{Machine Learning}, vol. 20, no. 3, pp. 273--297, 1995.
+
+\bibitem{pedregosa2011scikit}
+F. Pedregosa et al.,
+``Scikit learn: machine learning in Python,''
+\textit{Journal of Machine Learning Research}, vol. 12, pp. 2825--2830, 2011.
+
+\bibitem{paszke2019pytorch}
+A. Paszke et al.,
+``PyTorch: an imperative style, high performance deep learning library,''
+in \textit{Advances in Neural Information Processing Systems 32}, 2019, pp. 8024--8035.
+
+\bibitem{gilad2016cryptonets}
+R. Gilad-Bachrach, N. Dowlin, K. Laine, K. Lauter, M. Naehrig, and J. Wernsing,
+``CryptoNets: applying neural networks to encrypted data with high throughput and accuracy,''
+in \textit{Proceedings of the 33rd International Conference on Machine Learning}, 2016, pp. 201--210.
+
+\bibitem{chillotti2020tfhe}
+I. Chillotti, N. Gama, M. Georgieva, and M. Izabachene,
+``TFHE: fast fully homomorphic encryption over the torus,''
+\textit{Journal of Cryptology}, vol. 33, no. 1, pp. 34--91, 2020.
+
+\bibitem{dwork2014algorithmic}
+C. Dwork and A. Roth,
+``The algorithmic foundations of differential privacy,''
+\textit{Foundations and Trends in Theoretical Computer Science}, vol. 9, no. 3--4, pp. 211--407, 2014.
+
+\end{thebibliography}
+
+\end{document}

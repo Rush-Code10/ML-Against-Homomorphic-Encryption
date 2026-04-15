@@ -77,6 +77,9 @@ def plot_feature_importance(feature_importances: dict[str, float], output_path: 
         x=features,
         y=values,
         marker=dict(color=colors, line=dict(color=PALETTE['bg'], width=1.5)),
+        text=[f'{v:.3f}' for v in values],
+        textposition='outside',
+        textfont=dict(size=11, color=PALETTE['muted']),
         hovertemplate='<b>%{x}</b><br>Importance: %{y:.4f}<extra></extra>',
     )])
 
@@ -88,6 +91,7 @@ def plot_feature_importance(feature_importances: dict[str, float], output_path: 
     )
     layout['xaxis_title'] = 'Feature'
     layout['yaxis_title'] = 'Importance'
+    layout['yaxis'] = dict(**BASE_LAYOUT['yaxis'], range=[0, max(values) * 1.2])
     layout['height'] = 400
     layout['bargap'] = 0.35
     layout['transition'] = ENTRANCE_TRANSITION

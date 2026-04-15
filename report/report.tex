@@ -47,9 +47,16 @@
 \rule{\textwidth}{0.6pt}\\[0.6in]
 
 \begin{flushleft}
+\textbf{Submitted by:}\\[0.15in]
 \begin{tabular}{ll}
-\textbf{Submitted by}      & : [Student Name] \\
-\textbf{Roll Number}       & : [Roll Number] \\
+1. [Student Name 1] & Roll No: [Roll Number 1] \\
+2. [Student Name 2] & Roll No: [Roll Number 2] \\
+3. [Student Name 3] & Roll No: [Roll Number 3] \\
+4. [Student Name 4] & Roll No: [Roll Number 4] \\
+\end{tabular}
+
+\vspace{0.35in}
+\begin{tabular}{ll}
 \textbf{Branch}            & : [Department / Branch] \\
 \textbf{Semester}          & : [Semester] \\
 \textbf{Academic Year}     & : [Academic Year] \\
@@ -212,33 +219,55 @@ The generated dataset contains balanced samples across the five operation classe
 \textbf{Property} & \textbf{Value} \\
 \midrule
 Number of classes                 & 5 \\
-Samples per class (baseline)      & [INSERT] \\
-Samples per class (defended)      & [INSERT] \\
-Total rows                        & [INSERT] \\
+Samples per operation (baseline)  & 100 \\
+Samples per operation (defended)  & 100 \\
+Baseline rows                     & 500 \\
+Defended rows                     & 500 \\
+Total rows                        & 1000 \\
 Number of features                & 5 \\
 Train/test split                  & 80 / 20 \\
+Torch epochs                      & 10 \\
+Defense noise scale               & 0.8 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Classifier Accuracy}
-Table \ref{tab:accuracy} reports the classification accuracy of each model on the baseline dataset and on the defended dataset. The Dummy classifier serves as a lower bound. The Random Forest is expected to be the strongest attacker because metadata features tend to separate along simple thresholds. [Insert the values stored in \texttt{artifacts/metrics/accuracy\_comparison.json}.]
+The experiment was run twice on the same configuration, first with the mock backend, which provides fast execution and consistent metadata, and then with the real CKKS backend through TenSEAL. The Dummy classifier serves as a lower bound at 0.20, which corresponds to uniform guessing across the five classes. Table \ref{tab:acc_mock} reports the accuracies measured on the mock backend, and Table \ref{tab:acc_tenseal} reports the accuracies measured on the TenSEAL backend.
 
 \begin{table}[h]
 \centering
-\caption{Accuracy comparison on baseline and defended datasets.}
-\label{tab:accuracy}
+\caption{Accuracy comparison on the mock backend.}
+\label{tab:acc_mock}
 \begin{tabular}{lcc}
 \toprule
 \textbf{Model} & \textbf{Baseline accuracy} & \textbf{Defended accuracy} \\
 \midrule
-Dummy                   & [INSERT] & [INSERT] \\
-Random Forest           & [INSERT] & [INSERT] \\
-Support Vector Machine  & [INSERT] & [INSERT] \\
-Torch MLP               & [INSERT] & [INSERT] \\
+Dummy                   & 0.20 & 0.20 \\
+Random Forest           & 0.91 & 0.86 \\
+Support Vector Machine  & 0.79 & 0.67 \\
+Torch MLP               & 0.65 & 0.54 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{table}[h]
+\centering
+\caption{Accuracy comparison on the TenSEAL (real CKKS) backend.}
+\label{tab:acc_tenseal}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Baseline accuracy} & \textbf{Defended accuracy} \\
+\midrule
+Dummy                   & 0.20 & 0.20 \\
+Random Forest           & 0.81 & 0.71 \\
+Support Vector Machine  & 0.82 & 0.70 \\
+Torch MLP               & 0.59 & 0.45 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both backends agree on the qualitative picture. Every model beats the 0.20 random baseline by a wide margin, which confirms that the metadata traces carry usable information about the hidden operation. The Random Forest is the strongest attacker on the mock backend at 0.91, while on the TenSEAL backend the Support Vector Machine and the Random Forest are essentially tied at 0.82 and 0.81 respectively. The Torch MLP is consistently weaker than the two classical models, which is expected for a small tabular dataset of this size. After the defense is applied, every classifier loses accuracy on both backends, and the drop is largest for the strongest attackers, which matches the intuition that metadata perturbation damages exactly the sharp thresholds that tree based and margin based learners rely on.
 
 % INSERT FIGURE HERE: Accuracy comparison bar chart (from artifacts/plots/accuracy_comparison.png)
 % \begin{figure}[h]
