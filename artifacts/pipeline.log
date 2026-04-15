@@ -49,3 +49,11 @@
 2026-04-15 19:34:59 | INFO | main | Baseline Torch accuracy: 0.7100
 2026-04-15 19:34:59 | INFO | main | Defended Torch accuracy: 0.5300
 2026-04-15 19:34:59 | INFO | main | Pipeline complete
+2026-04-15 22:23:34 | INFO | main | Starting metadata leakage pipeline
+2026-04-15 22:23:34 | INFO | main | Configuration: {'random_seed': 42, 'samples_per_operation': 50, 'vector_size': 16, 'regression_features': 4, 'defense_noise_scale': 0.08, 'baseline_noise_scale': 0.07, 'workload_jitter_scale': 0.2, 'torch_hidden_dim': 32, 'torch_epochs': 10, 'torch_batch_size': 64, 'torch_learning_rate': 0.001, 'backend_preference': 'tenseal'}
+2026-04-15 22:23:35 | INFO | main | Initialized FHE backend: tenseal
+2026-04-15 22:24:08 | INFO | main | Baseline RF accuracy: 0.7800
+2026-04-15 22:24:08 | INFO | main | Defended RF accuracy: 0.6600
+2026-04-15 22:24:08 | INFO | main | Baseline Torch accuracy: 0.5600
+2026-04-15 22:24:08 | INFO | main | Defended Torch accuracy: 0.2800
+2026-04-15 22:24:08 | INFO | main | Pipeline complete
